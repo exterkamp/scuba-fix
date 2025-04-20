@@ -30,7 +30,7 @@
             }
 
             #bottom-controls {
-                display: none;
+                opacity: 0;
             }
 
             .code {
@@ -329,7 +329,7 @@
                 // Output image.
                 const postProcessBitmap = output.transferToImageBitmap();
 
-                bottomControls.style['display'] = "unset"
+                bottomControls.style['opacity'] = "1"
 
                 drawImageOnCanvas(outputCanvas, postProcessBitmap);
             }
