@@ -16,6 +16,17 @@
             #canvas-container {
                 flex-grow: 1;
                 overflow: hidden;
+                position: relative;
+
+                & #original {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                }
+
+                & #output {
+                    position: relative;
+                }
             }
 
             #bottom-controls {
@@ -36,11 +47,13 @@
                 <input type="file" id="file-chooser" />
             </div>
             <div id="canvas-container">
+                <canvas id="original"></canvas>
                 <canvas id="output"></canvas>
             </div>
             <div id="bottom-controls">
+                <!-- TODO: Make the filter adjustable. -->
                 <label for="filter-strength">Filter Strength</label>
-                <input id="filter-strength" value="100" type="range" min="1" max="100"/>
+                <input id="filter-strength" disabled value="100" type="range" min="1" max="100"/>
                 <button>Download at original size</button>
             </div>
         </div>
@@ -234,6 +247,8 @@
             const chooser = document.getElementById("file-chooser");
             const outputCanvas = document.getElementById("output");
             const outputCtx = outputCanvas.getContext("2d");
+            const originalCanvas = document.getElementById("original");
+            const originalCtx = originalCanvas.getContext("2d");
             const bottomControls = document.getElementById("bottom-controls");
             bottomControls.getControl = function (id) {
                 return this.querySelector(`#${id}`);
@@ -242,10 +257,65 @@
             bottomControls.getControl("filter-strength").addEventListener('input', (e) => {
                 applyFilterToCanvas();
             });
+
+            outputCanvas.addEventListener("mousedown", (e) => {
+                outputCanvas.style['opacity'] = "0";
+            })
+
+            outputCanvas.addEventListener("mouseup", (e) => {
+                outputCanvas.style['opacity'] = "1";
+            })
+
+            outputCanvas.addEventListener("mouseleave", (e) => {
+                outputCanvas.style['opacity'] = "1";
+            })
             
             // Global state.
             let currentImageData = undefined;
             let currentFilter = undefined;
+
+            function getCanvasArea() {
+                let width = window.innerWidth;
+                let height = /* output flex height */ document.getElementById("canvas-container").clientHeight;
+                console.log(`Canvas Area [${width}, ${height}]`);
+                return {width, height};
+            }
+
+            function scaleImageToCanvas(imageDataIn) {
+                let area = getCanvasArea();
+                // The width-over-height aspect ratio.
+                let bitmapAspectRatio = imageDataIn.width / imageDataIn.height;
+
+                // scale down width
+                let scaledWidth = Math.min(area.width, imageDataIn.width);
+                // scale down height
+                let scaledHeight = scaledWidth / bitmapAspectRatio;
+                // If height is still too large, then scale down by that instead:
+                if (scaledHeight > area.height) {
+                    console.log("Width scaling resulted in too tall of an image, let's retry with height.");
+                    scaledHeight = area.height;
+                    scaledWidth = bitmapAspectRatio * scaledHeight;
+                }
+
+                console.log(`Original size [${imageDataIn.width}, ${imageDataIn.height}] Aspect Ratio ${bitmapAspectRatio}, Scaled size [${scaledWidth}, ${scaledHeight}]`);
+
+                return {width: scaledWidth, height: scaledHeight};
+            }
+
+            function drawImageOnCanvas(canvas, imageDataIn) {
+                return new Promise((resolve) => {
+                    let scale = scaleImageToCanvas(imageDataIn);
+
+                    let ctx = canvas.getContext("2d");
+
+                    canvas.height = scale.height;
+                    canvas.width = scale.width;
+
+                    // drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+                    ctx.drawImage(imageDataIn, 0, 0, imageDataIn.width, imageDataIn.height, 0, 0, scale.width, scale.height);
+                    resolve();
+                });
+            }
 
 
             function applyFilterToCanvas() {
@@ -261,20 +331,7 @@
 
                 bottomControls.style['display'] = "unset"
 
-                let width = window.innerWidth;
-                let height = /* output flex height */ document.getElementById("canvas-container").clientHeight;
-
-                outputCanvas.width = width;
-                outputCanvas.height = height;
-
-                let bitmapAspectRatio = currentImageData.width / currentImageData.height;
-
-                console.log(`Original size [${currentImageData.width}, ${currentImageData.height}] Aspect Ratio ${bitmapAspectRatio}, Scaled size [${width}, ${width / bitmapAspectRatio}]`);
-
-                // outputCtx.reset();
-
-                // drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-                outputCtx.drawImage(postProcessBitmap, 0, 0, currentImageData.width, currentImageData.height, 0, 0, width, width / bitmapAspectRatio);
+                drawImageOnCanvas(outputCanvas, postProcessBitmap);
             }
 
             chooser.addEventListener("change", handleFileChoice, false);
@@ -294,14 +351,16 @@
                 const myImageData = getImageDataFromBitmap(bitmap);
                 currentImageData = myImageData;
 
-                // Do conversion
-                const filterStartTime = Date.now();
-                const filter = generateImageFilter(myImageData.data, bitmap.width, bitmap.height);
-                console.log(`Filter: ${JSON.stringify(filter)}`);
-                currentFilter = filter;
-                console.log(`Filter took ${Date.now() - filterStartTime}ms to make.`);
-                // And now apply the initial rendering.
-                applyFilterToCanvas();
+                drawImageOnCanvas(originalCanvas, bitmap).then(() => {
+                    // Then do the conversion.
+                    const filterStartTime = Date.now();
+                    const filter = generateImageFilter(myImageData.data, bitmap.width, bitmap.height);
+                    console.log(`Filter: ${JSON.stringify(filter)}`);
+                    currentFilter = filter;
+                    console.log(`Filter took ${Date.now() - filterStartTime}ms to make.`);
+                    // And now apply the initial rendering.
+                    applyFilterToCanvas();
+                });
             }
         </script>
     </body>
