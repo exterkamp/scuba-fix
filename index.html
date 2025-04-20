@@ -313,7 +313,10 @@
 
                     // drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
                     ctx.drawImage(imageDataIn, 0, 0, imageDataIn.width, imageDataIn.height, 0, 0, scale.width, scale.height);
-                    resolve();
+                    setTimeout(() => {
+                        // Queue the promise resolution behind a macrotask.
+                        resolve();
+                    }, 0);
                 });
             }
 
@@ -345,6 +348,10 @@
                 if (file.type !== "image/jpeg") {
                     throw new Error("Wrong filetype.")
                 }
+
+                // Reset the contexts.
+                outputCtx.reset();
+                originalCtx.reset();
 
                 const bitmap = await createImageBitmap(file);
                 // Let's convert this to data via an offscreen canvas.
