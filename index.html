@@ -57,7 +57,32 @@
                 <button>Download at original size</button>
             </div>
         </div>
-        <script>
+        <script id="worker-script">
+            // This script won't be parsed by JS engines because its type is javascript/worker.
+            self.onmessage = function(event) {
+                let bitmap = undefined;
+                let filter = undefined;
+                let pixels = undefined;
+                switch (event.data.command) {
+                    case "CALCULATE_FILTER":
+                        // We expect a bitmap.
+                        bitmap = event.data.bitmap;
+                        pixels = getImageDataFromBitmap(bitmap);
+                        filter = generateImageFilter(pixels.data, bitmap.width, bitmap.height);
+                        self.postMessage({filter});
+                        break;
+                    case "APPLY_FILTER":
+                        // We expect a bitmap, a filter, and we will send back imageData.
+                        bitmap = event.data.bitmap;
+                        pixels = getImageDataFromBitmap(bitmap);
+                        filter = event.data.filter;
+                        let imageData = applyFilterOffscreen(pixels, filter, 1);
+                        // we need to bitmap that back to transfer.
+                        self.postMessage({imageData});
+                        break;
+                }
+            };
+            
             function generateImageFilter(pixels, width, height) {
                 // Magic values:
                 const numOfPixels = width * height
@@ -235,12 +260,7 @@
                 }
                 // console.log(workingImageData);
                 const newImage = new ImageData(workingImageData, imageData.width, imageData.height);
-                // imageData putImage onto output canvas
-                const output = new OffscreenCanvas(newImage.width, newImage.height);
-                ctx = output.getContext("2d");
-                ctx.putImageData(newImage, 0, 0);
-                // return output canvas
-                return output;
+                return newImage;
             }
         </script>
         <script>
@@ -250,13 +270,32 @@
             const originalCanvas = document.getElementById("original");
             const originalCtx = originalCanvas.getContext("2d");
             const bottomControls = document.getElementById("bottom-controls");
-            bottomControls.getControl = function (id) {
-                return this.querySelector(`#${id}`);
+
+            // Create our inline web-worker.
+            var blob = new Blob([
+                document.querySelector('#worker-script').textContent
+            ], { type: "text/javascript" })
+
+            var worker = new Worker(window.URL.createObjectURL(blob));
+            worker.onmessage = function(e) {
+                if (e.data.hasOwnProperty("filter")) {
+                    let filter = e.data.filter;
+                    console.log(`filter: ${JSON.stringify(filter)}`);
+                    // Okay, we have a filter, now apply it to our image.
+                    createImageBitmap(imageFile).then((bitmap) => {
+                        worker.postMessage({ command: "APPLY_FILTER", bitmap, filter}, [bitmap]);
+                    })
+                }
+                if (e.data.hasOwnProperty("imageData")) {
+                    // Draw it on our canvas.
+                    console.log(`${e.data.imageData}`);
+                    createImageBitmap(e.data.imageData).then((bitmap) => {
+                        drawImageOnCanvas(outputCanvas, bitmap);
+                    });
+                }
             }
 
-            bottomControls.getControl("filter-strength").addEventListener('input', (e) => {
-                applyFilterToCanvas();
-            });
+            // Use the OffscreenCanvas API and send to the worker thread
 
             outputCanvas.addEventListener("mousedown", (e) => {
                 outputCanvas.style['opacity'] = "0";
@@ -271,6 +310,8 @@
             })
             
             // Global state.
+            let imageFile = undefined;
+            let currentBitmap = undefined;
             let currentImageData = undefined;
             let currentFilter = undefined;
 
@@ -320,23 +361,6 @@
                 });
             }
 
-
-            function applyFilterToCanvas() {
-                if (!currentImageData || !currentFilter) {
-                    throw new Error("not filter or image data.");
-                }
-                const applicationStartTime = Date.now();
-                const filterStrength = bottomControls.getControl("filter-strength").value;
-                const output = applyFilterOffscreen(currentImageData, currentFilter, filterStrength);
-                console.log(`Applying the filter took ${Date.now() - applicationStartTime}ms.`);
-                // Output image.
-                const postProcessBitmap = output.transferToImageBitmap();
-
-                bottomControls.style['opacity'] = "1"
-
-                drawImageOnCanvas(outputCanvas, postProcessBitmap);
-            }
-
             chooser.addEventListener("change", handleFileChoice, false);
 
             async function handleFileChoice() {
@@ -353,21 +377,15 @@
                 outputCtx.reset();
                 originalCtx.reset();
 
-                const bitmap = await createImageBitmap(file);
-                // Let's convert this to data via an offscreen canvas.
-                const myImageData = getImageDataFromBitmap(bitmap);
-                currentImageData = myImageData;
+                // Draw the OG image for the comparator.
+                const localBitmap = await createImageBitmap(file);
+                await drawImageOnCanvas(originalCanvas, localBitmap);
 
-                drawImageOnCanvas(originalCanvas, bitmap).then(() => {
-                    // Then do the conversion.
-                    const filterStartTime = Date.now();
-                    const filter = generateImageFilter(myImageData.data, bitmap.width, bitmap.height);
-                    console.log(`Filter: ${JSON.stringify(filter)}`);
-                    currentFilter = filter;
-                    console.log(`Filter took ${Date.now() - filterStartTime}ms to make.`);
-                    // And now apply the initial rendering.
-                    applyFilterToCanvas();
-                });
+                const bitmap = await createImageBitmap(file);
+                imageFile = file;
+
+                // Post a message to our worker to start to calculate the filter.
+                worker.postMessage({ command: "CALCULATE_FILTER", bitmap}, [bitmap]);
             }
         </script>
     </body>
