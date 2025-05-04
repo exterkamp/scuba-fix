@@ -1,10 +1,11 @@
 <main class="main">
   <div class="content">
     @if (!!file()) {
-      <span>File is: {{ file()?.name }}</span>
+      <h2>File is: {{ file()?.name }}</h2>
       <!-- TODO: Put the viewer here. -->
+       <app-image-preview [imageFile]="file()" />
     } @else {
-      <app-import-image-prompt (fileUploaded)="saveFile($event)"></app-import-image-prompt>
+      <app-import-image-prompt (fileUploaded)="saveFile($event)"/>
     }
   </div>
 </main>

@@ -1,11 +1,13 @@
 import { Component, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import {ImportImagePromptComponent} from './import-image-prompt/import-image-prompt.component';
+import { ImagePreviewComponent } from './image-preview/image-preview.component';
 
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet,
     ImportImagePromptComponent,
+    ImagePreviewComponent
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
@@ -15,6 +17,5 @@ export class AppComponent {
 
   saveFile(file: File) {
     this.file.set(file);
-    console.log(this.file());
   }
 }
