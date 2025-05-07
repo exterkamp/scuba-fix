@@ -66,13 +66,39 @@ export class ImagePreviewComponent {
   }
 
   hideFilter() {
-    console.log('hide filter');
     this.outputCanvas.nativeElement.style.opacity = '0';
   }
 
   showFilter() {
-    console.log('show filter');
     this.outputCanvas.nativeElement.style.opacity = '1';
+  }
+
+  download() {
+    this.downloadImageFromCanvas();
+  }
+
+  private applyFilterToImageAndBlobify(mimeType = 'image/png'): Promise<Blob> {
+    return createImageBitmap(this.imageFile()!)
+      .then((bitmap) => applyFilterOffscreen(bitmap, this.filter!))
+      .then((imageData) => createImageBitmap(imageData))
+      .then((bitmap) => {
+        const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+        let ctx = offscreen.getContext("2d")!;
+        ctx.drawImage(bitmap, 0, 0);
+        return offscreen.convertToBlob({type: mimeType});
+    });
+  }
+
+  async downloadImageFromCanvas(filename = 'scuba-fix.png', mimeType = 'image/png') {
+    const blob = await this.applyFilterToImageAndBlobify(mimeType);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Clean up the URL object
   }
 
   
@@ -142,4 +168,34 @@ export class ImagePreviewComponent {
         throw new Error(`oh my god oh god no: ${JSON.stringify(result)}`)
     }
   }
+
+
+}
+
+function createImageDataFromBitmap(bitmap: ImageBitmap): ImageData {
+  // Let's convert this to data via an offscreen canvas.
+  const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+  let ctx = offscreen.getContext("2d")!;
+  // bitmap -> draw onto offscreen canvas
+  ctx.drawImage(bitmap, 0, 0);
+  // read out imageData from bitmap
+  return ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+}
+
+function applyFilterOffscreen(bitmap: ImageBitmap, filter: Filter) {
+  const imageData = createImageDataFromBitmap(bitmap);
+  const workingImageData = new Uint8ClampedArray(imageData.data);
+  const baseImageData = imageData.data;
+  // apply filter over imageData
+  for (let i = 0; i < baseImageData.length; i += 4) {
+      workingImageData[i] = Math.min(255, Math.max(0, baseImageData[i] * filter.red.r + 
+                                                      baseImageData[i+1] * filter.red.g +
+                                                      baseImageData[i+2] * filter.red.b +
+                                                      filter.red.offset * 255)); // RED
+      workingImageData[i + 1] = Math.min(255, Math.max(0, baseImageData[i+1] * filter.green.g + filter.green.offset * 255)); // GREEN
+      workingImageData[i + 2] = Math.min(255, Math.max(0, baseImageData[i+2] * filter.blue.b + filter.blue.offset * 255)); // Blue
+  }
+  // console.log(workingImageData);
+  const newImage = new ImageData(workingImageData, imageData.width, imageData.height);
+  return newImage;
 }
