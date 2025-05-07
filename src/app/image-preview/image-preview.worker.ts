@@ -19,14 +19,6 @@ addEventListener('message', ({ data }) => {
   // Work comes in as any possible work type.
   const work = data as WorkRequest;
   switch (work.type) {
-    case WorkType.CreateImageData:
-      const imageData = createImageDataFromBitmap(work.bitmap);
-      postMessage({
-        type: WorkType.CreateImageData,
-        result: CreateImageBitmapResults.Success,
-        imageData,
-      } as CreateImageBitmapSuccessResult);
-      break;
     case WorkType.CreateFilter:
       const filter = createImageFilter(work.bitmap);
       postMessage({

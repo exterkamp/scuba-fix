@@ -1,1 +1,4 @@
-<canvas #outputCanvas></canvas>
+<div class="canvas-container">
+    <canvas (mousedown)="hideFilter()" (mouseup)="showFilter()" (mouseleave)="showFilter()"  #outputCanvas></canvas>
+    <canvas class="original-canvas" #originalCanvas></canvas>
+</div>
