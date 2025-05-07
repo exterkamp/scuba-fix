@@ -1,5 +1,17 @@
 import { Component, input, ViewChild, ElementRef } from '@angular/core';
 
+import {
+  CreateImageBitmapRequest,
+  CreateFilterReqeuest,
+  CreateFilterResults,
+  Filter,
+  WorkType,
+  WorkResult,
+  CreateImageBitmapResults,
+  ApplyFilterResults,
+  ApplyFilterRequest,
+} from './image-preview-worker-types';
+
 @Component({
   selector: 'app-image-preview',
   imports: [],
@@ -15,13 +27,38 @@ export class ImagePreviewComponent {
   imageFile = input<File>();
 
   private bitmap: ImageBitmap | undefined = undefined;
+  private imageData: ImageData | undefined = undefined;
+  private filter: Filter | undefined = undefined;
+  private worker?: Worker = undefined;
 
   ngAfterViewInit(): void {
     this.ctx = this.outputCanvas.nativeElement.getContext('2d')!;
-    this.drawImageOnCanvas();
-
-    // Calculate the filter.
-    // TODO: Make service to calculate a filter offscreen.
+    // Draw, then initialize our worker, and start processing.
+    
+    createImageBitmap(this.imageFile()!)
+      .then((bitmap) => {
+          this.drawImageOnCanvas(bitmap);
+          // Dumb.
+          return bitmap;
+        })
+      .then((bitmap) => {
+      // Calculate the filter.
+      // TODO: Make service to calculate a filter offscreen.
+      if (typeof Worker !== 'undefined') {
+        // Create a new
+        this.worker = new Worker(new URL('./image-preview.worker', import.meta.url));
+        this.worker.onmessage = ({ data }) => {
+          this.handleWorkerResponse(data);
+        };
+        this.worker.postMessage({
+          type: WorkType.CreateFilter,
+          bitmap,
+        } as CreateFilterReqeuest, [bitmap]);
+      } else {
+        // Web workers are not supported in this environment.
+        // You should add a fallback so that your program still executes correctly.
+      }
+    });
   }
   
   scaleImageToCanvas(bitmap: ImageBitmap) {
@@ -45,15 +82,70 @@ export class ImagePreviewComponent {
     return {width: scaledWidth, height: scaledHeight};
 }
 
-  async drawImageOnCanvas() {
-      this.bitmap = await createImageBitmap(this.imageFile()!);
-      let scale = this.scaleImageToCanvas(this.bitmap);
+  drawImageOnCanvas(bitmap: ImageBitmap) {
+      let scale = this.scaleImageToCanvas(bitmap);
 
       // Manually scale the output canvas.
       this.outputCanvas.nativeElement.height = scale.height;
       this.outputCanvas.nativeElement.width = scale.width;
 
-      this.ctx.drawImage(this.bitmap, 0, 0, this.bitmap.width, this.bitmap.height, 0, 0, scale.width, scale.height);
-}
-  
+      this.ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, scale.width, scale.height);
+  }
+
+  private handleWorkerResponse(result: WorkResult) {
+    // First we must figure out what kind of function we're a result for.
+    switch (result.type) {
+      case WorkType.CreateImageData:
+        // Now handle all resultant types.
+        switch (result.result) {
+          case CreateImageBitmapResults.Success:
+            this.setImageData(result.imageData);
+            console.log(`We got some image data back: ${this.imageData}`);
+            break;
+          case CreateImageBitmapResults.Failure:
+            throw new Error(`Error: ${result.reason}`);
+        }
+        break;
+      case WorkType.CreateFilter:
+        // Now handle all resultant types.
+        switch (result.result) {
+          case CreateFilterResults.Success:
+            this.filter = result.filter;
+            console.log(`filter: ${JSON.stringify(this.filter)}`);
+            
+            createImageBitmap(this.imageFile()!).then((bitmap) => {
+              this.worker!.postMessage({
+                type: WorkType.ApplyFilter,
+                bitmap: bitmap,
+                filter: JSON.stringify(result.filter),
+              } as ApplyFilterRequest, [bitmap]);
+            });
+            break;
+        }
+        break;
+      case WorkType.ApplyFilter:
+        switch (result.result) {
+          case ApplyFilterResults.Success:
+            createImageBitmap(result.imageData).then((bitmap) => {
+              this.drawImageOnCanvas(bitmap);
+            });
+            break;
+        }
+        break;
+      default:
+        throw new Error(`oh my god oh god no: ${JSON.stringify(result)}`)
+    }
+  }
+
+  private setImageData(imageData: ImageData) {
+    this.imageData = imageData;
+    // And now calculate the filter!
+    if (!this.worker) {
+      return;
+    }
+    // this.worker.postMessage({
+    //   type: WorkType.CreateFilter,
+    //   imageData: this.imageData,
+    // } as CreateFilterReqeuest, [this.imageData]);
+  }
 }

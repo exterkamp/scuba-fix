@@ -18,4 +18,8 @@ export class AppComponent {
   saveFile(file: File) {
     this.file.set(file);
   }
+
+  reset() {
+    this.file.set(undefined);
+  }
 }
