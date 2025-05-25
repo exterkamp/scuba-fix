@@ -1,3 +1,35 @@
-<div class="max-w-md">
-    <input type="file" [formControl]="fileCtrl" (change)="fileChanged($event)">
+<div class="floating-content">
+    <div
+        class="bg-white rounded-2xl shadow-xl p-6 flex flex items-center gap-4">
+        @if (images.length > 0) {
+            <div class="flex overflow-auto gap-4">
+                @for (imageSrc of images; track imageSrc) {
+                <div
+                    class="image-prev relative bg-gray-200
+                            rounded-xl border border-gray-300">
+                    @if (imageSrc) {
+                    <img (click)="selectImage($index); $event.stopPropagation()"
+                        [src]="imageSrc" alt="Uploaded Image" class="w-full h-full object-cover rounded-xl">
+                    <button (click)="removeImage($index); $event.stopPropagation()"
+                        class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-75 hover:opacity-100 transition-opacity">
+                        &times;
+                    </button>
+                    }
+                    @else {
+                    <span class="text-gray-500 text-lg">image</span>
+                    }
+                </div>
+                }
+            </div>
+        }
+
+        <div class="image-prev
+                    border-2 border-dashed border-gray-400 rounded-xl
+                    flex items-center justify-center cursor-pointer hover:bg-gray-50"
+            (click)="triggerFileInput()">
+            <span class="text-gray-500 text-4xl font-light">+</span>
+            <input type="file" #fileInput id="fileInput" class="hidden" (change)="onFileSelected($event)"
+                accept="image/*">
+        </div>
+    </div>
 </div>

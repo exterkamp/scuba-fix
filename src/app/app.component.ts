@@ -16,6 +16,8 @@ export class AppComponent {
   file = signal<File|undefined>(undefined)
 
   saveFile(file: File) {
+    console.log(`saving file: ${file.name}`)
+    this.reset();
     this.file.set(file);
   }
 
