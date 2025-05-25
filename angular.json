@@ -56,7 +56,8 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "baseHref": "/scuba-fix/"
             },
             "development": {
               "optimization": false,
