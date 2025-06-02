@@ -4,17 +4,27 @@ main {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 1rem;
     box-sizing: inherit;
     position: relative;
 }
 
-.content {
-    display: flex;
-    justify-content: space-around;
-    width: 100%;
-    max-width: 700px;
-    margin-bottom: 3rem;
-    flex-direction: column;
-    align-items: center;
+.preview {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgb(249, 249, 249);
+}
+
+.control-panel {
+  position: fixed;
+  bottom: 5%;
+  max-width: 80%;
+}
+
+.image-prev {
+  width: 100px;
+  height: 100px;
+  flex: none
 }

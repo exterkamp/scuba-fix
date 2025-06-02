@@ -1,14 +1,51 @@
 <main class="main">
-  <div class="content">
-    @if (!!file()) {
-      <h2>File is: {{ file()?.name }}</h2>
-      <!-- Hm, tailwind is kinda dumb. -->
-      <button class="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded" (click)="reset()">reset</button>
-      <!-- TODO: Put the viewer here. -->
-       <app-image-preview [imageFile]="file()" />
-    }
-  </div>
-  <app-import-image-prompt (fileUploaded)="saveFile($event)"/>
+  <ng-container *ngTemplateOutlet="fullBleedPreview"></ng-container>
+  <ng-container *ngTemplateOutlet="controlPanel"></ng-container>
 </main>
 
 <router-outlet />
+
+<ng-template #fullBleedPreview>
+  <div class="preview">
+    @let selectedImage = images[selectedIndex];
+    @if (selectedImage) {
+      <img [src]="selectedImage.dataURL" />
+    }
+    @else {
+      <span>Select and image to preview.</span>
+    }
+  </div>
+</ng-template>
+
+<ng-template #controlPanel>
+  <div class="control-panel">
+    <div class="bg-white rounded-2xl shadow-xl p-6 flex flex items-center gap-4">
+      @if (images.length > 0) {
+      <div class="flex overflow-auto gap-4">
+        @for (image of images; track image.dataURL) {
+        <div class="image-prev relative bg-gray-200
+                            rounded-xl border border-gray-300">
+          @if (image.dataURL) {
+          <img (click)="selectImage($index); $event.stopPropagation()" [src]="image.dataURL" alt="Uploaded Image"
+            class="w-full h-full object-cover rounded-xl">
+          <button (click)="removeImage($index); $event.stopPropagation()"
+            class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-75 hover:opacity-100 transition-opacity">
+            &times;
+          </button>
+          }
+          @else {
+          <span class="text-gray-500 text-lg">image</span>
+          }
+        </div>
+        }
+      </div>
+      }
+      <div class="image-prev
+                    border-2 border-dashed border-gray-400 rounded-xl
+                    flex items-center justify-center cursor-pointer hover:bg-gray-50" (click)="triggerFileInput()">
+        <span class="text-gray-500 text-4xl font-light">+</span>
+        <input type="file" #fileInput id="fileInput" class="hidden" (change)="onFileSelected($event)" accept="image/*">
+      </div>
+    </div>
+  </div>
+</ng-template>
