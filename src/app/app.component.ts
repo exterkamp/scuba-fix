@@ -40,6 +40,17 @@ export class AppComponent {
     this.selectedIndex = index;
   }
 
+  downloadSelectedImage() {
+    const link = document.createElement('a');
+    const selectedImage = this.images[this.selectedIndex];
+    if (!selectedImage) return;
+    link.href = selectedImage.dataURL;
+    link.download = selectedImage.originalFile.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   /**
    * Removes an image from a specified slot by setting its value back to null.
    * @param index The index of the image slot to clear.

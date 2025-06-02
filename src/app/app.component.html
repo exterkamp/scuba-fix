@@ -18,8 +18,24 @@
 </ng-template>
 
 <ng-template #controlPanel>
-  <div class="control-panel">
-    <div class="bg-white rounded-2xl shadow-xl p-6 flex flex items-center gap-4">
+  <div class="control-panel bg-white rounded-2xl shadow-xl p-3">
+    @let selectedImage = images[selectedIndex];
+    @if (selectedImage) {
+      <div class="pb-3">
+        <span>Selected Image: {{selectedImage.originalFile.name}}</span>
+        <br/>
+        <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
+          process
+        </button>
+        <button (click)="downloadSelectedImage()"
+        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
+          download
+        </button>
+        <!-- <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
+          rename</button> -->
+      </div>
+    }
+    <div class="flex flex items-center gap-4">
       @if (images.length > 0) {
       <div class="flex overflow-auto gap-4">
         @for (image of images; track image.dataURL) {
