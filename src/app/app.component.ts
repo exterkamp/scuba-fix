@@ -1,16 +1,30 @@
 import { Component, signal, ViewChild, ElementRef } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { NgTemplateOutlet } from '@angular/common';
+import { JsonPipe, NgTemplateOutlet } from '@angular/common';
+
+import {
+  CreateFilterReqeuest,
+  CreateFilterResults,
+  Filter,
+  WorkType,
+  WorkResult,
+  ApplyFilterResults,
+  ApplyFilterRequest,
+} from './image-preview-worker-types';
 
 export interface Image {
+  id: string;
   originalFile: File;
+  processedImageData: ImageData;
   dataURL: string;
+  filter?: Filter;
 }
 
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet,
     NgTemplateOutlet,
+    JsonPipe
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
@@ -18,6 +32,7 @@ export interface Image {
 export class AppComponent {
   images: Image[] = [];
   selectedIndex: number = -1;
+  private worker?: Worker = undefined;
 
   // Use @ViewChild to get a reference to the hidden file input element in the template.
   // 'fileInput' matches the local template variable #fileInput in the HTML.
@@ -25,6 +40,28 @@ export class AppComponent {
 
 
   file = signal<File|undefined>(undefined)
+
+  ngAfterViewInit(): void {
+    // Initialize our worker.
+    if (typeof Worker !== 'undefined') {
+      // Create a new
+      this.worker = new Worker(new URL('./image-preview.worker', import.meta.url));
+      this.worker.onmessage = ({ data }) => {
+        this.handleWorkerResponse(data);
+      };
+    } else {
+      // Web workers are not supported in this environment.
+      // You should add a fallback so that your program still executes correctly.
+    }
+  }
+
+  getImage(id: string): Image {
+    const i =  this.images.find((el) => el.id === id);
+    if (!i) {
+      throw Error("kaboom");
+    }
+    return i;
+  }
 
   saveFile(file: File) {
     console.log(`saving file: ${file.name}`)
@@ -38,6 +75,7 @@ export class AppComponent {
 
   selectImage(index: number) {
     this.selectedIndex = index;
+    const img = this.images[this.selectedIndex];
   }
 
   downloadSelectedImage() {
@@ -49,6 +87,17 @@ export class AppComponent {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  processSelectedImage() {
+    const img = this.images[this.selectedIndex];
+    createImageBitmap(img.originalFile).then((bitmap) => {
+      this.worker!.postMessage({
+          type: WorkType.CreateFilter,
+          id: img.id,
+          bitmap,
+      } as CreateFilterReqeuest, [bitmap]);
+    });
   }
 
   /**
@@ -90,6 +139,7 @@ export class AppComponent {
 
       reader.onload = (e: ProgressEvent<FileReader>) => {
         const image = {
+          id: `${Date.now()}_image`,
           originalFile: file,
           dataURL: e.target?.result,
         } as Image;
@@ -98,6 +148,43 @@ export class AppComponent {
       };
       // Start reading the file as a Data URL (base64 encoded string), which is suitable for `src` attributes.
       reader.readAsDataURL(file);
+    }
+  }
+
+
+  private handleWorkerResponse(result: WorkResult) {
+    // First we must figure out what kind of function we're a result for.
+    switch (result.type) {
+      case WorkType.CreateFilter:
+        // Now handle all resultant types.
+        switch (result.result) {
+          case CreateFilterResults.Success:
+            const img = this.getImage(result.id);
+            img.filter = result.filter;
+            // this.filter = result.filter;
+            console.log(`image ${img.id} updated with filter ${img.filter}`);
+            // createImageBitmap(this.imageFile()!).then((bitmap) => {
+            //   this.worker!.postMessage({
+            //     type: WorkType.ApplyFilter,
+            //     bitmap: bitmap,
+            //     filter: JSON.stringify(result.filter),
+            //   } as ApplyFilterRequest, [bitmap]);
+            // });
+            break;
+        }
+        break;
+      // case WorkType.ApplyFilter:
+      //   switch (result.result) {
+      //     case ApplyFilterResults.Success:
+      //       createImageBitmap(result.imageData).then((bitmap) => {
+      //         this.filteredBitmap = bitmap;
+      //         this.drawImageOnCanvas(bitmap, this.outputCanvas.nativeElement);
+      //       });
+      //       break;
+      //   }
+      //   break;
+      default:
+        throw new Error(`oh my god oh god no: ${JSON.stringify(result)}`)
     }
   }
 }

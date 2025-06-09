@@ -24,7 +24,31 @@
       <div class="pb-3">
         <span>Selected Image: {{selectedImage.originalFile.name}}</span>
         <br/>
-        <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
+        <!-- add the filter -->
+        @let filter = selectedImage.filter;
+        @if (!!filter) {
+          <div>
+            @let channel = filter.red;
+            <span class="bg-red-100">{{channel.r}}</span>
+            /<span class="bg-green-100">{{channel.g}}</span>
+            /<span class="bg-blue-100">{{channel.b}}</span>
+          </div>
+          <div>
+            @let channelBlue = filter.blue;
+            <span class="bg-red-100">{{channelBlue.r}}</span>
+            /<span class="bg-green-100">{{channelBlue.g}}</span>
+            /<span class="bg-blue-100">{{channelBlue.b}}</span>
+          </div>
+          <div>
+            @let channelGreen = filter.green;
+            <span class="bg-red-100">{{channelGreen.r}}</span>
+            /<span class="bg-green-100">{{channelGreen.g}}</span>
+            /<span class="bg-blue-100">{{channelGreen.b}}</span>
+          </div>
+        }
+        <br/>
+        <button (click)="processSelectedImage()"
+        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
           process
         </button>
         <button (click)="downloadSelectedImage()"
