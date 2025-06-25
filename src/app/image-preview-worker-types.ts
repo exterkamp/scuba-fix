@@ -27,7 +27,7 @@ export interface CreateImageBitmapRequest {
 
 export interface CreateFilterReqeuest {
     type: WorkType.CreateFilter;
-    id: string,
+    id: string;
     bitmap: ImageBitmap;
 }
 
@@ -35,6 +35,7 @@ export interface ApplyFilterRequest {
     type: WorkType.ApplyFilter;
     bitmap: ImageBitmap;
     filter: string; // JSON string of Filter.
+    id: string;
 }
 
 export interface UnknownResult {
@@ -86,6 +87,7 @@ export interface ApplyFilteSuccessResult {
     type: WorkType.ApplyFilter;
     result: ApplyFilterResults.Success;
     imageData: ImageData;
+    id: string;
 }
 
 export type WorkResult = CreateImageBitmapResult | CreateFilterResult | UnknownResult | ApplyFilteSuccessResult;

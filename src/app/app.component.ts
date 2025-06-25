@@ -17,6 +17,7 @@ export interface Image {
   originalFile: File;
   processedImageData: ImageData;
   dataURL: string;
+  processedImageURL: string;
   filter?: Filter;
 }
 
@@ -100,6 +101,18 @@ export class AppComponent {
     });
   }
 
+  applyFilter() {
+    const img = this.images[this.selectedIndex];
+    createImageBitmap(img.originalFile).then((bitmap) => {
+      this.worker!.postMessage({
+        type: WorkType.ApplyFilter,
+        bitmap: bitmap,
+        filter: JSON.stringify(img.filter),
+        id: img.id,
+      } as ApplyFilterRequest, [bitmap]);
+    });
+  }
+
   /**
    * Removes an image from a specified slot by setting its value back to null.
    * @param index The index of the image slot to clear.
@@ -152,7 +165,7 @@ export class AppComponent {
   }
 
 
-  private handleWorkerResponse(result: WorkResult) {
+  private async handleWorkerResponse(result: WorkResult) {
     // First we must figure out what kind of function we're a result for.
     switch (result.type) {
       case WorkType.CreateFilter:
@@ -173,19 +186,48 @@ export class AppComponent {
             break;
         }
         break;
-      // case WorkType.ApplyFilter:
-      //   switch (result.result) {
-      //     case ApplyFilterResults.Success:
-      //       createImageBitmap(result.imageData).then((bitmap) => {
-      //         this.filteredBitmap = bitmap;
-      //         this.drawImageOnCanvas(bitmap, this.outputCanvas.nativeElement);
-      //       });
-      //       break;
-      //   }
-      //   break;
+      case WorkType.ApplyFilter:
+        switch (result.result) {
+          case ApplyFilterResults.Success:
+            const img = this.getImage(result.id);
+            img.processedImageData = result.imageData;
+
+            const blob = await blobifyImageData(img.processedImageData);
+            const url = URL.createObjectURL(blob);
+            img.processedImageURL = url;
+            // const link = document.createElement('a');
+            // link.href = url;
+            // link.download = filename;
+            // document.body.appendChild(link);
+            // link.click();
+            // document.body.removeChild(link);
+            // URL.revokeObjectURL(url); // Clean up the URL object
+
+            // createImageBitmap(img.processedImageData).then((bitmap) => {
+            //   this.drawImageOnCanvas(bitmap, this.outputCanvas.nativeElement);
+            // });
+            break;
+        }
+        break;
       default:
         throw new Error(`oh my god oh god no: ${JSON.stringify(result)}`)
     }
   }
+
+  // dragStart(e: MouseEvent) {
+  //   console.log(e);
+  //   let src = e.target;
+  //   console.log(src);
+  // }
+}
+
+function blobifyImageData(imageData: ImageData, mimeType = 'image/png'): Promise<Blob> {
+  return createImageBitmap(imageData)
+    .then((bitmap) => {
+      const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+      let ctx = offscreen.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0);
+      return offscreen.convertToBlob({type: mimeType});
+  });
 }
 

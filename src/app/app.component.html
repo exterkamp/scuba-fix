@@ -9,12 +9,21 @@
   <div class="preview">
     @let selectedImage = images[selectedIndex];
     @if (selectedImage) {
-      <img [src]="selectedImage.dataURL" />
+        @if (selectedImage.processedImageURL) {
+          <img [src]="selectedImage.processedImageURL" />
+      } @else if (selectedImage.dataURL) {
+          <img [src]="selectedImage.dataURL" />
+      }
     }
     @else {
       <span>Select and image to preview.</span>
     }
   </div>
+  <!-- <div>
+    <div class="drag" (mousedown)="dragStart($event); $event.stopPropagation()">
+      🫳
+    </div>
+  </div> -->
 </ng-template>
 
 <ng-template #controlPanel>
@@ -51,6 +60,12 @@
         class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
           process
         </button>
+        @if (selectedImage.filter) {
+          <button (click)="applyFilter()"
+          class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
+            apply
+          </button>
+        }
         <button (click)="downloadSelectedImage()"
         class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
           download

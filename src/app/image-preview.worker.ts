@@ -36,6 +36,7 @@ addEventListener('message', ({ data }) => {
         type: WorkType.ApplyFilter,
         result: ApplyFilterResults.Success,
         imageData: appliedImage,
+        id: work.id,
       } as ApplyFilteSuccessResult);
       break;
     default:

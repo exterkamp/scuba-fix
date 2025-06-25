@@ -8,6 +8,12 @@ main {
     position: relative;
 }
 
+.drag {
+  position: absolute;
+  left: 50%;
+  cursor: grab;
+}
+
 .preview {
     position: absolute;
     left: 0;
