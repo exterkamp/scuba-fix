@@ -79,26 +79,87 @@
   gap: 0.75rem;
 }
 
-.strength {
+.method {
+  display: inline-flex;
+  margin: 0;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface-2);
+
+  & label {
+    position: relative;
+    padding: 0.35rem 0.85rem;
+    border-radius: 0.45rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  & input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  & label:has(input:checked) {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+
+  & label:has(input:focus-visible) {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  &:disabled { opacity: 0.5; }
+}
+
+.slider {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  flex: 1 1 16rem;
-  max-inline-size: 28rem;
+  gap: 0.6rem;
+  flex: 1 1 12rem;
+  max-inline-size: 20rem;
 
   & input {
     flex: 1;
+    min-inline-size: 0;
     accent-color: var(--accent);
   }
 }
 
-.strength-label { font-weight: 600; }
+.slider-label {
+  min-inline-size: 4.2rem;
+  font-weight: 600;
+}
 
-.strength-value {
-  min-inline-size: 3.5ch;
+.slider-value {
+  min-inline-size: 4ch;
   text-align: end;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+
+.busy {
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.6);
+  color: white;
+  pointer-events: none;
+  /* Only show for renders that take a noticeable time. */
+  opacity: 0;
+  animation: appear 0s linear 250ms forwards;
+}
+
+@keyframes appear {
+  to { opacity: 1; }
 }
 
 .download-error {

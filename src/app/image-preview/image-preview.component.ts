@@ -1,18 +1,23 @@
-import { Component, computed, effect, ElementRef, inject, input, signal, viewChild } from '@angular/core';
-import { applyColorMatrix, ColorMatrix, scaleMatrix } from '../processing/color-correction';
+import { Component, computed, effect, ElementRef, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { ColorMatrix } from '../processing/color-correction';
 import { ImageProcessor } from '../processing/image-processor.service';
+import { Adjustments, Method } from '../processing/pipeline';
 
 /** Longest edge of the on-screen preview. Full resolution is only used for downloads. */
 const PREVIEW_MAX_EDGE = 1600;
+const SETTINGS_KEY = 'scuba-fix:adjustments';
 
 type Status =
   | { kind: 'loading' }
-  | { kind: 'ready'; original: ImageData; matrix: ColorMatrix }
+  | { kind: 'ready'; session: number; original: ImageData; classicMatrix: ColorMatrix }
   | { kind: 'error'; message: string };
 
+interface Settings { method: Method; strength: number; clarity: number; }
+const DEFAULT_SETTINGS: Settings = { method: 'classic', strength: 100, clarity: 0 };
+
 /**
- * Shows the corrected version of `file` with a strength slider, press-and-hold
- * comparison with the original, and full-resolution download.
+ * Shows the corrected version of `file` with method/strength/clarity controls,
+ * press-and-hold comparison with the original, and full-resolution download.
  */
 @Component({
   selector: 'app-image-preview',
@@ -25,47 +30,70 @@ export class ImagePreviewComponent {
 
   readonly file = input.required<File>();
 
-  /** Correction strength, 0–100. Shared across images on purpose. */
-  readonly strength = signal(100);
-  readonly comparing = signal(false);
+  // Adjustments are remembered across images and visits.
+  private readonly saved = loadSettings();
+  readonly method = signal<Method>(this.saved.method);
+  /** 0–100 */
+  readonly strength = signal(this.saved.strength);
+  /** 0–100 */
+  readonly clarity = signal(this.saved.clarity);
+  private readonly adjustments = computed<Adjustments>(() => ({
+    method: this.method(),
+    strength: this.strength() / 100,
+    clarity: this.clarity() / 100,
+  }));
+
   readonly status = signal<Status>({ kind: 'loading' });
   readonly errorMessage = computed(() => {
     const s = this.status();
     return s.kind === 'error' ? s.message : null;
   });
+  readonly ready = computed(() => this.status().kind === 'ready');
+  /** Latest rendered preview; null until the first render for this image arrives. */
+  readonly rendered = signal<ImageData | null>(null);
+  readonly rendering = signal(false);
+  readonly comparing = signal(false);
   readonly downloading = signal(false);
   readonly downloadError = signal<string | null>(null);
 
-  /** Scratch buffer for the filtered preview, reused across slider moves. */
-  private working?: ImageData;
   /** Incremented per load so results for a previously selected file are dropped. */
   private loadToken = 0;
+  private previewQueued = false;
 
   constructor() {
     effect(() => {
       this.load(this.file());
     });
 
+    // Re-render whenever the adjustments change; requestPreview coalesces bursts.
     effect(() => {
-      const status = this.status();
-      if (status.kind !== 'ready') return;
-      this.draw(status.original, status.matrix, this.strength() / 100, this.comparing());
+      this.adjustments();
+      if (this.status().kind === 'ready') untracked(() => this.requestPreview());
     });
+
+    effect(() => {
+      const rendered = this.rendered();
+      const status = this.status();
+      if (!rendered || status.kind !== 'ready') return;
+      this.draw(this.comparing() ? status.original : rendered);
+    });
+
+    effect(() => saveSettings({ method: this.method(), strength: this.strength(), clarity: this.clarity() }));
   }
 
   private async load(file: File) {
     const token = ++this.loadToken;
     this.status.set({ kind: 'loading' });
+    this.rendered.set(null);
     this.comparing.set(false);
     this.downloadError.set(null);
     try {
       const original = await decodePreview(file);
       if (token !== this.loadToken) return;
       // The worker takes ownership of the buffer, so hand it a copy.
-      const matrix = await this.processor.analyze(original.data.slice(), original.width, original.height);
+      const { session, classicMatrix } = await this.processor.load(original.data.slice(), original.width, original.height);
       if (token !== this.loadToken) return;
-      this.working = new ImageData(original.width, original.height);
-      this.status.set({ kind: 'ready', original, matrix });
+      this.status.set({ kind: 'ready', session, original, classicMatrix });
     } catch (e) {
       if (token !== this.loadToken) return;
       console.error(e);
@@ -78,20 +106,52 @@ export class ImagePreviewComponent {
     }
   }
 
-  private draw(original: ImageData, matrix: ColorMatrix, strength: number, showOriginal: boolean) {
-    const canvas = this.canvas().nativeElement;
-    if (canvas.width !== original.width || canvas.height !== original.height) {
-      canvas.width = original.width;
-      canvas.height = original.height;
-    }
-    const ctx = canvas.getContext('2d')!;
-    if (showOriginal || strength === 0) {
-      ctx.putImageData(original, 0, 0);
+  /** Renders the preview; while one render is in flight, only the latest request is kept. */
+  private async requestPreview() {
+    if (this.rendering()) {
+      this.previewQueued = true;
       return;
     }
-    const out = this.working!;
-    applyColorMatrix(original.data, out.data, scaleMatrix(matrix, strength));
-    ctx.putImageData(out, 0, 0);
+    this.rendering.set(true);
+    try {
+      do {
+        this.previewQueued = false;
+        const status = this.status();
+        if (status.kind !== 'ready') break;
+        const token = this.loadToken;
+        try {
+          const pixels = await this.processor.preview(status.session, this.adjustments());
+          if (token === this.loadToken) {
+            this.rendered.set(new ImageData(pixels, status.original.width, status.original.height));
+          }
+        } catch (e) {
+          // A newer image replaced this session; its own load will render.
+          if (token === this.loadToken) throw e;
+        }
+      } while (this.previewQueued);
+    } catch (e) {
+      console.error(e);
+      this.status.set({ kind: 'error', message: 'Processing failed — the image may be too large for this device.' });
+    } finally {
+      this.rendering.set(false);
+    }
+  }
+
+  private draw(image: ImageData) {
+    const canvas = this.canvas().nativeElement;
+    if (canvas.width !== image.width || canvas.height !== image.height) {
+      canvas.width = image.width;
+      canvas.height = image.height;
+    }
+    canvas.getContext('2d')!.putImageData(image, 0, 0);
+  }
+
+  protected setMethod(method: Method) {
+    this.method.set(method);
+  }
+
+  protected sliderValue(event: Event): number {
+    return (event.target as HTMLInputElement).valueAsNumber;
   }
 
   // --- Compare (press and hold) ---
@@ -122,7 +182,7 @@ export class ImagePreviewComponent {
     const file = this.file();
     try {
       const { mimeType, extension } = outputFormat(file.type);
-      const blob = await this.processor.render(file, scaleMatrix(status.matrix, this.strength() / 100), mimeType);
+      const blob = await this.processor.export(file, this.adjustments(), status.classicMatrix, mimeType);
       saveBlob(blob, `${baseName(file.name)}-scubafix.${extension}`);
     } catch (e) {
       console.error(e);
@@ -149,6 +209,30 @@ async function decodePreview(file: File): Promise<ImageData> {
     return ctx.getImageData(0, 0, width, height);
   } finally {
     bitmap.close();
+  }
+}
+
+function loadSettings(): Settings {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
+    if (!raw) return DEFAULT_SETTINGS;
+    const s = JSON.parse(raw) as Partial<Settings>;
+    const pct = (v: unknown, d: number) => (typeof v === 'number' && v >= 0 && v <= 100 ? v : d);
+    return {
+      method: s.method === 'fusion' ? 'fusion' : 'classic',
+      strength: pct(s.strength, DEFAULT_SETTINGS.strength),
+      clarity: pct(s.clarity, DEFAULT_SETTINGS.clarity),
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function saveSettings(s: Settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    // Storage may be unavailable (private mode, SSR); settings just won't persist.
   }
 }
 

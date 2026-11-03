@@ -1,49 +1,40 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { ColorMatrix } from './color-correction';
-import { analyze, render } from './processing-core';
+import { Adjustments } from './pipeline';
+import { ProcessingEngine } from './processing-engine';
 import { WorkerRequest, WorkerResponse } from './worker-protocol';
 
 type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never;
-type Pending = { resolve: (r: WorkerResponse) => void; reject: (e: Error) => void };
+type Request = DistributiveOmit<WorkerRequest, 'id'>;
+type ResponseOf<T extends WorkerResponse['type']> = Extract<WorkerResponse, { type: T }>;
 
 /**
- * Promise-based front end for the color-correction worker. The worker is
- * created lazily (so nothing happens during prerendering) and work falls back
- * to the main thread if workers aren't available.
+ * A promise-based connection to one processing worker, with a main-thread
+ * fallback. Created lazily so nothing runs during prerendering.
  */
-@Injectable({ providedIn: 'root' })
-export class ImageProcessor implements OnDestroy {
+class WorkerChannel {
   private worker?: Worker | null;
+  private fallback?: ProcessingEngine;
   private nextId = 0;
-  private pending = new Map<number, Pending>();
+  private pending = new Map<number, { resolve: (r: WorkerResponse) => void; reject: (e: Error) => void }>();
 
-  /** Computes the correction matrix for an RGBA pixel buffer. The buffer is transferred. */
-  async analyze(pixels: Uint8ClampedArray, width: number, height: number): Promise<ColorMatrix> {
+  async send(req: Request, transfer: Transferable[] = []): Promise<WorkerResponse> {
+    const full = { ...req, id: this.nextId++ } as WorkerRequest;
     const worker = this.getWorker();
-    if (!worker) return analyze(pixels, width, height);
-    const res = await this.send({ type: 'analyze', pixels, width, height }, [pixels.buffer]);
-    return (res as Extract<WorkerResponse, { type: 'analyze' }>).matrix;
+    const res = worker
+      ? await new Promise<WorkerResponse>((resolve, reject) => {
+          this.pending.set(full.id, { resolve, reject });
+          worker.postMessage(full, transfer);
+        })
+      : (await (this.fallback ??= new ProcessingEngine()).handle(full))[0];
+    if (res.type === 'error') throw new Error(res.message);
+    return res;
   }
 
-  /** Renders `file` at full resolution with `matrix` applied. */
-  async render(file: Blob, matrix: ColorMatrix, mimeType: string, quality = 0.92): Promise<Blob> {
-    const worker = this.getWorker();
-    if (!worker) return render(file, matrix, mimeType, quality);
-    const res = await this.send({ type: 'render', file, matrix: [...matrix], mimeType, quality });
-    return (res as Extract<WorkerResponse, { type: 'render' }>).blob;
-  }
-
-  ngOnDestroy(): void {
+  terminate() {
     this.worker?.terminate();
-    this.failAll(new Error('Image processor destroyed.'));
-  }
-
-  private send(req: DistributiveOmit<WorkerRequest, 'id'>, transfer: Transferable[] = []): Promise<WorkerResponse> {
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker!.postMessage({ ...req, id } as WorkerRequest, transfer);
-    });
+    this.worker = undefined;
+    this.failAll(new Error('Image processor stopped.'));
   }
 
   private getWorker(): Worker | null {
@@ -54,10 +45,8 @@ export class ImageProcessor implements OnDestroy {
     const worker = new Worker(new URL('./color-correction.worker', import.meta.url), { type: 'module' });
     worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
       const p = this.pending.get(data.id);
-      if (!p) return;
       this.pending.delete(data.id);
-      if (data.type === 'error') p.reject(new Error(data.message));
-      else p.resolve(data);
+      p?.resolve(data);
     };
     worker.onerror = (e) => {
       // A crashed worker can't be trusted: fail everything and start fresh next time.
@@ -72,5 +61,50 @@ export class ImageProcessor implements OnDestroy {
   private failAll(error: Error) {
     for (const p of this.pending.values()) p.reject(error);
     this.pending.clear();
+  }
+}
+
+/**
+ * Front end for image processing. Previews and full-size exports use separate
+ * workers so a slow export never blocks slider feedback.
+ */
+@Injectable({ providedIn: 'root' })
+export class ImageProcessor implements OnDestroy {
+  private readonly previewChannel = new WorkerChannel();
+  private readonly exportChannel = new WorkerChannel();
+  private nextSession = 0;
+
+  /**
+   * Starts a preview session for RGBA pixels (the buffer is transferred).
+   * Returns the session id and the classic correction matrix.
+   */
+  async load(pixels: Uint8ClampedArray, width: number, height: number): Promise<{ session: number; classicMatrix: ColorMatrix }> {
+    const session = this.nextSession++;
+    const res = await this.previewChannel.send({ type: 'load', session, pixels, width, height }, [pixels.buffer]);
+    return { session, classicMatrix: (res as ResponseOf<'load'>).classicMatrix };
+  }
+
+  /** Renders the current session's preview with `adjustments`. */
+  async preview(session: number, adjustments: Adjustments): Promise<Uint8ClampedArray> {
+    const res = await this.previewChannel.send({ type: 'preview', session, adjustments: { ...adjustments } });
+    return (res as ResponseOf<'preview'>).pixels;
+  }
+
+  /** Renders `file` at full resolution. */
+  async export(file: Blob, adjustments: Adjustments, classicMatrix: ColorMatrix, mimeType: string, quality = 0.92): Promise<Blob> {
+    const res = await this.exportChannel.send({
+      type: 'export',
+      file,
+      adjustments: { ...adjustments },
+      classicMatrix: [...classicMatrix],
+      mimeType,
+      quality,
+    });
+    return (res as ResponseOf<'export'>).blob;
+  }
+
+  ngOnDestroy(): void {
+    this.previewChannel.terminate();
+    this.exportChannel.terminate();
   }
 }

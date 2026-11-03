@@ -1,27 +1,32 @@
 import { ColorMatrix } from './color-correction';
+import { Adjustments } from './pipeline';
 
-/** Messages the main thread sends to the color-correction worker. */
+/** Messages the main thread sends to the worker. */
 export type WorkerRequest =
   | {
       id: number;
-      type: 'analyze';
-      /** RGBA pixels (may be a downscaled copy of the image). */
+      /** Start a new preview session; replaces any previous one. */
+      type: 'load';
+      session: number;
       pixels: Uint8ClampedArray;
       width: number;
       height: number;
     }
+  | { id: number; type: 'preview'; session: number; adjustments: Adjustments }
   | {
       id: number;
-      type: 'render';
-      /** The original image file; decoded at full resolution in the worker. */
+      /** Full-resolution export of the original file. */
+      type: 'export';
       file: Blob;
-      matrix: ColorMatrix;
+      adjustments: Adjustments;
+      classicMatrix: ColorMatrix;
       mimeType: string;
       quality: number;
     };
 
 /** Messages the worker sends back. */
 export type WorkerResponse =
-  | { id: number; type: 'analyze'; matrix: ColorMatrix }
-  | { id: number; type: 'render'; blob: Blob }
+  | { id: number; type: 'load'; classicMatrix: ColorMatrix }
+  | { id: number; type: 'preview'; pixels: Uint8ClampedArray }
+  | { id: number; type: 'export'; blob: Blob }
   | { id: number; type: 'error'; message: string };
