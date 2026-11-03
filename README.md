@@ -2,6 +2,8 @@
 
 Restore natural colors to underwater photos, entirely in the browser — nothing is uploaded.
 
+**Try it: <https://exterkamp.github.io/scuba-fix/>**
+
 Water absorbs red light first, so underwater photos come out blue-green. It's an
 Angular 19 app; all image math runs in web workers. Two correction methods:
 
@@ -65,3 +67,7 @@ npm run build      # production build, base href /scuba-fix/
 git add dist && git commit -m "Build"
 npm run gh-pages   # pushes dist/scuba-fix/browser to the gh-pages branch
 ```
+
+The site is served from the `gh-pages` branch at
+<https://exterkamp.github.io/scuba-fix/>; changes show up a minute or so after
+the push.
