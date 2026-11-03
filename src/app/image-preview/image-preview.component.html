@@ -1,7 +1,85 @@
-<div class="canvas-container">
-    <canvas (mousedown)="hideFilter()" (mouseup)="showFilter()" (mouseleave)="showFilter()"  #outputCanvas></canvas>
-    <canvas class="original-canvas" #originalCanvas></canvas>
+<div class="stage" [attr.aria-busy]="status().kind === 'loading'">
+  <canvas
+    #canvas
+    class="image"
+    [class.hidden]="status().kind !== 'ready'"
+    role="img"
+    [attr.aria-label]="(comparing() ? 'Original: ' : 'Corrected: ') + file().name"
+    (pointerdown)="startCompare($event)"
+    (pointerup)="endCompare()"
+    (pointercancel)="endCompare()"
+    (lostpointercapture)="endCompare()"
+    (contextmenu)="$event.preventDefault()"
+  ></canvas>
+
+  @switch (status().kind) {
+    @case ('loading') {
+      <div class="overlay">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Analyzing…</span>
+      </div>
+    }
+    @case ('error') {
+      <p class="overlay error" role="alert">{{ errorMessage() }}</p>
+    }
+    @case ('ready') {
+      <span class="badge" [class.original]="comparing()" aria-hidden="true">
+        {{ comparing() ? 'Original' : 'Corrected' }}
+      </span>
+    }
+  }
 </div>
-<button class="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded" (click)="download()" >
-    Download
-</button>
+
+<div class="controls" role="group" aria-label="Adjustments">
+  <label class="strength">
+    <span class="strength-label">Strength</span>
+    <input
+      type="range"
+      min="0"
+      max="100"
+      step="1"
+      [value]="strength()"
+      [disabled]="status().kind !== 'ready'"
+      (input)="strength.set($any($event.target).valueAsNumber)"
+      (dblclick)="strength.set(100)"
+      aria-describedby="strength-value"
+    />
+    <output id="strength-value" class="strength-value">{{ strength() }}%</output>
+  </label>
+
+  <div class="actions">
+  <button
+    type="button"
+    class="btn"
+    [attr.aria-pressed]="comparing()"
+    [disabled]="status().kind !== 'ready'"
+    (pointerdown)="startCompare($event)"
+    (pointerup)="endCompare()"
+    (pointercancel)="endCompare()"
+    (lostpointercapture)="endCompare()"
+    (keydown)="compareKey($event, true)"
+    (keyup)="compareKey($event, false)"
+    (blur)="endCompare()"
+    (contextmenu)="$event.preventDefault()"
+  >
+    Hold to compare
+  </button>
+
+  <button
+    type="button"
+    class="btn primary"
+    [disabled]="status().kind !== 'ready' || downloading()"
+    (click)="download()"
+  >
+    @if (downloading()) {
+      <span class="spinner small" aria-hidden="true"></span> Saving…
+    } @else {
+      Download full size
+    }
+  </button>
+  </div>
+</div>
+
+@if (downloadError(); as message) {
+  <p class="download-error" role="alert">{{ message }}</p>
+}

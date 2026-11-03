@@ -1,106 +1,43 @@
+<header class="header">
+  <h1 class="title">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z" fill="currentColor" />
+    </svg>
+    ScubaFix
+  </h1>
+  <p class="tagline">Bring back the reds in underwater photos. Everything runs on your device.</p>
+</header>
+
 <main class="main">
-  <ng-container *ngTemplateOutlet="fullBleedPreview"></ng-container>
-  <ng-container *ngTemplateOutlet="controlPanel"></ng-container>
+  @if (library.selected(); as image) {
+    <app-image-preview [file]="image.file" />
+  } @else {
+    <section class="empty" aria-labelledby="empty-title">
+      <svg class="empty-icon" viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
+        <path
+          d="M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+        <circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" />
+      </svg>
+      <h2 id="empty-title" class="empty-title">Add a photo to get started</h2>
+      <p class="empty-hint">Drop images anywhere, paste from your clipboard, or</p>
+      <button type="button" class="btn primary" (click)="openPicker()">Choose photos</button>
+    </section>
+  }
 </main>
 
-<router-outlet />
+<footer class="footer" [class.collapsed]="library.images().length === 0">
+  <app-image-tray (skipped)="showSkipped($event)" />
+</footer>
 
-<ng-template #fullBleedPreview>
-  <div class="preview">
-    @let selectedImage = images[selectedIndex];
-    @if (selectedImage) {
-        @if (selectedImage.processedImageURL) {
-          <img [src]="selectedImage.processedImageURL" />
-      } @else if (selectedImage.dataURL) {
-          <img [src]="selectedImage.dataURL" />
-      }
-    }
-    @else {
-      <span>Select and image to preview.</span>
-    }
-  </div>
-  <!-- <div>
-    <div class="drag" (mousedown)="dragStart($event); $event.stopPropagation()">
-      🫳
-    </div>
-  </div> -->
-</ng-template>
+<p class="notice" role="status">{{ notice() }}</p>
 
-<ng-template #controlPanel>
-  <div class="control-panel bg-white rounded-2xl shadow-xl p-3">
-    @let selectedImage = images[selectedIndex];
-    @if (selectedImage) {
-      <div class="pb-3">
-        <span>Selected Image: {{selectedImage.originalFile.name}}</span>
-        <br/>
-        <!-- add the filter -->
-        @let filter = selectedImage.filter;
-        @if (!!filter) {
-          <div>
-            @let channel = filter.red;
-            <span class="bg-red-100">{{channel.r}}</span>
-            /<span class="bg-green-100">{{channel.g}}</span>
-            /<span class="bg-blue-100">{{channel.b}}</span>
-          </div>
-          <div>
-            @let channelBlue = filter.blue;
-            <span class="bg-red-100">{{channelBlue.r}}</span>
-            /<span class="bg-green-100">{{channelBlue.g}}</span>
-            /<span class="bg-blue-100">{{channelBlue.b}}</span>
-          </div>
-          <div>
-            @let channelGreen = filter.green;
-            <span class="bg-red-100">{{channelGreen.r}}</span>
-            /<span class="bg-green-100">{{channelGreen.g}}</span>
-            /<span class="bg-blue-100">{{channelGreen.b}}</span>
-          </div>
-        }
-        <br/>
-        <button (click)="processSelectedImage()"
-        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
-          process
-        </button>
-        @if (selectedImage.filter) {
-          <button (click)="applyFilter()"
-          class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
-            apply
-          </button>
-        }
-        <button (click)="downloadSelectedImage()"
-        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 mr-1 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
-          download
-        </button>
-        <!-- <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out">
-          rename</button> -->
-      </div>
-    }
-    <div class="flex flex items-center gap-4">
-      @if (images.length > 0) {
-      <div class="flex overflow-auto gap-4">
-        @for (image of images; track image.dataURL) {
-        <div class="image-prev relative bg-gray-200
-                            rounded-xl border border-gray-300">
-          @if (image.dataURL) {
-          <img (click)="selectImage($index); $event.stopPropagation()" [src]="image.dataURL" alt="Uploaded Image"
-            class="w-full h-full object-cover rounded-xl">
-          <button (click)="removeImage($index); $event.stopPropagation()"
-            class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-75 hover:opacity-100 transition-opacity">
-            &times;
-          </button>
-          }
-          @else {
-          <span class="text-gray-500 text-lg">image</span>
-          }
-        </div>
-        }
-      </div>
-      }
-      <div class="image-prev
-                    border-2 border-dashed border-gray-400 rounded-xl
-                    flex items-center justify-center cursor-pointer hover:bg-gray-50" (click)="triggerFileInput()">
-        <span class="text-gray-500 text-4xl font-light">+</span>
-        <input type="file" #fileInput id="fileInput" class="hidden" (change)="onFileSelected($event)" accept="image/*">
-      </div>
-    </div>
+@if (dragging()) {
+  <div class="drop-overlay" aria-hidden="true">
+    <p>Drop photos to add them</p>
   </div>
-</ng-template>
+}

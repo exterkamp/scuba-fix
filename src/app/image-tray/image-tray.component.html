@@ -1,0 +1,41 @@
+<ul class="tray" aria-label="Loaded images">
+  @for (image of library.images(); track image.id) {
+    <li class="thumb" [class.selected]="image.id === library.selectedId()">
+      <button
+        type="button"
+        class="thumb-select"
+        [attr.aria-pressed]="image.id === library.selectedId()"
+        [attr.aria-label]="'Edit ' + image.file.name"
+        [title]="image.file.name"
+        (click)="library.select(image.id)"
+      >
+        <img [src]="image.thumbnailUrl" alt="" width="80" height="80" decoding="async" />
+      </button>
+      <button
+        type="button"
+        class="thumb-remove"
+        [attr.aria-label]="'Remove ' + image.file.name"
+        (click)="library.remove(image.id)"
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+    </li>
+  }
+  <li class="thumb">
+    <button type="button" class="thumb-add" aria-label="Add images" title="Add images" (click)="openPicker()">
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+    </button>
+  </li>
+</ul>
+<input
+  #fileInput
+  type="file"
+  accept="image/*"
+  multiple
+  hidden
+  (change)="onFilesChosen(fileInput)"
+/>
